@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Slot Machine</string>
+    <string name="login_title">Login</string>
+    <string name="register_title">Register</string>
+    <string name="username">Username</string>
+    <string name="password">Password</string>
+    <string name="login_button">Login</string>
+    <string name="register_button">Register</string>
+    <string name="to_register">Go to Register</string>
+    <string name="to_login">Go to Login</string>
+    <string name="spin">Spin</string>
+    <string name="points">Points</string>
+    <string name="logout">Logout</string>
+</resources>
