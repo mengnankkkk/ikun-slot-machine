@@ -4,9 +4,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.animation.ObjectAnimator;
-import android.animation.ValueAnimator;
-import android.view.animation.DecelerateInterpolator;
+import android.view.animation.TranslateAnimation;
+import com.ikun.slotmachine.game.Symbol;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -28,10 +27,10 @@ public class GameActivity extends AppCompatActivity {
     private String currentUsername;
     private int currentPoints;
     private boolean isSpinning = false;
-    private int[] lastResults;
+    private Symbol[] lastResults;
 
-    private static final int ANIMATION_DURATION = 2000;
-    private static final int[] REEL_STOP_TIMES = {400, 800, 1200, 1600};
+    private static final int ANIMATION_DURATION = 2500;
+    private static final int[] REEL_STOP_TIMES = {600, 1200, 1800, 2400};
     private Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -100,43 +99,47 @@ public class GameActivity extends AppCompatActivity {
     }
 
     private void startReelAnimation() {
-        int[] animationFrames = {
-            android.R.drawable.ic_menu_camera,
-            android.R.drawable.ic_dialog_email,
-            android.R.drawable.ic_dialog_info,
-            android.R.drawable.ic_dialog_map,
-            android.R.drawable.ic_menu_day
-        };
+        Symbol[] allSymbols = gameLogic.getAllSymbols();
+        lastResults = gameLogic.generateResults();
 
         long globalStartTime = System.currentTimeMillis();
 
         for (int i = 0; i < 4; i++) {
-            animateReelWithScrolling(reels[i], animationFrames, i, globalStartTime);
+            animateReelWithScrolling(reels[i], allSymbols, i, globalStartTime);
         }
 
-        handler.postDelayed(this::getResults, ANIMATION_DURATION + 1000);
+        handler.postDelayed(this::processResults, ANIMATION_DURATION + 1500);
     }
 
-    private void animateReelWithScrolling(ImageView reel, int[] frames, int reelIndex, long globalStartTime) {
+    private void animateReelWithScrolling(ImageView reel, Symbol[] allSymbols, int reelIndex, long globalStartTime) {
         final int[] frameIndex = {0};
         final int stopTime = REEL_STOP_TIMES[reelIndex];
+        final Symbol targetSymbol = lastResults[reelIndex];
 
         final Runnable scrollRunnable = new Runnable() {
             @Override
             public void run() {
                 if (isSpinning) {
-                    reel.setImageResource(frames[frameIndex[0] % frames.length]);
+                    Symbol currentSymbol = allSymbols[frameIndex[0] % allSymbols.length];
+                    reel.setImageResource(currentSymbol.drawableId);
+                    
+                    TranslateAnimation slideIn = new TranslateAnimation(0, 0, -100, 0);
+                    slideIn.setDuration(100);
+                    reel.startAnimation(slideIn);
+                    
                     frameIndex[0]++;
                     
                     long elapsedTime = System.currentTimeMillis() - globalStartTime;
                     
                     if (elapsedTime < stopTime) {
                         float progress = (float) elapsedTime / stopTime;
-                        float decelerationFactor = 1.0f - (progress * progress);
-                        int delay = Math.max(10, (int) (50 * decelerationFactor));
+                        float accelerationFactor = progress * progress;
+                        int minDelay = 30;
+                        int maxDelay = 500;
+                        int delay = minDelay + (int) ((maxDelay - minDelay) * accelerationFactor);
                         handler.postDelayed(this, delay);
                     } else {
-                        reel.setImageResource(lastResults[reelIndex]);
+                        reel.setImageResource(targetSymbol.drawableId);
                         reel.clearAnimation();
                     }
                 }
@@ -146,32 +149,37 @@ public class GameActivity extends AppCompatActivity {
         handler.post(scrollRunnable);
     }
 
-    private void getResults() {
+    private void processResults() {
         isSpinning = false;
-        lastResults = gameLogic.generateResults();
-        displayResultsWithDelay(lastResults);
-    }
-
-    private void displayResultsWithDelay(int[] results) {
-        for (int i = 0; i < 4; i++) {
-            final int index = i;
-            handler.postDelayed(() -> {
-                reels[index].setImageResource(results[index]);
-                reels[index].clearAnimation();
-            }, i * 150L);
-        }
-
-        handler.postDelayed(this::processWinnings, 600);
+        processWinnings();
     }
 
     private void processWinnings() {
+        StringBuilder resultMessage = new StringBuilder();
+        int totalPointChange = 0;
+
+        for (Symbol symbol : lastResults) {
+            int modifier = gameLogic.getPointModifier(symbol);
+            if (modifier != 0) {
+                totalPointChange += modifier;
+                resultMessage.append(symbol.name).append(": ").append(modifier).append(" | ");
+            }
+        }
+
         int multiplier = gameLogic.calculateMultiplier(lastResults);
         int winnings = gameLogic.calculateWinnings(multiplier);
 
         if (multiplier > 0) {
-            currentPoints += winnings;
-            Toast.makeText(this, "WIN! " + multiplier + " symbols match! +$ " + winnings + " points!", 
-                Toast.LENGTH_LONG).show();
+            totalPointChange += winnings;
+            resultMessage.append("Match Bonus: +").append(winnings);
+        }
+
+        if (totalPointChange != 0) {
+            currentPoints += totalPointChange;
+            String toastMsg = totalPointChange > 0 
+                ? "WIN! +" + totalPointChange + " points!" 
+                : "BOMB! " + totalPointChange + " points!";
+            Toast.makeText(this, toastMsg, Toast.LENGTH_LONG).show();
         } else {
             Toast.makeText(this, "No match, try again!", Toast.LENGTH_SHORT).show();
         }
