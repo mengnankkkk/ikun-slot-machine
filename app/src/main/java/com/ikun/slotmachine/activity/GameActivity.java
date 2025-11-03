@@ -4,8 +4,9 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.animation.Animation;
-import android.view.animation.AnimationUtils;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -29,8 +30,8 @@ public class GameActivity extends AppCompatActivity {
     private boolean isSpinning = false;
     private int[] lastResults;
 
-    private static final int ANIMATION_DURATION = 1800;
-    private static final int STOP_DELAY_INTERVAL = 300;
+    private static final int ANIMATION_DURATION = 2000;
+    private static final int[] REEL_STOP_TIMES = {400, 800, 1200, 1600};
     private Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
@@ -107,37 +108,42 @@ public class GameActivity extends AppCompatActivity {
             android.R.drawable.ic_menu_day
         };
 
-        for (ImageView reel : reels) {
-            animateReelWithRotation(reel, animationFrames);
-        }
+        long globalStartTime = System.currentTimeMillis();
 
         for (int i = 0; i < 4; i++) {
-            final int reelIndex = i;
-            handler.postDelayed(() -> stopReelWithDelay(reelIndex), 
-                ANIMATION_DURATION + (i * STOP_DELAY_INTERVAL));
+            animateReelWithScrolling(reels[i], animationFrames, i, globalStartTime);
         }
 
-        handler.postDelayed(this::getResults, 
-            ANIMATION_DURATION + (3 * STOP_DELAY_INTERVAL) + 500);
+        handler.postDelayed(this::getResults, ANIMATION_DURATION + 1000);
     }
 
-    private void animateReelWithRotation(ImageView reel, int[] frames) {
+    private void animateReelWithScrolling(ImageView reel, int[] frames, int reelIndex, long globalStartTime) {
         final int[] frameIndex = {0};
-        handler.post(new Runnable() {
+        final int stopTime = REEL_STOP_TIMES[reelIndex];
+
+        final Runnable scrollRunnable = new Runnable() {
             @Override
             public void run() {
                 if (isSpinning) {
                     reel.setImageResource(frames[frameIndex[0] % frames.length]);
                     frameIndex[0]++;
-                    handler.postDelayed(this, 80);
+                    
+                    long elapsedTime = System.currentTimeMillis() - globalStartTime;
+                    
+                    if (elapsedTime < stopTime) {
+                        float progress = (float) elapsedTime / stopTime;
+                        float decelerationFactor = 1.0f - (progress * progress);
+                        int delay = Math.max(10, (int) (50 * decelerationFactor));
+                        handler.postDelayed(this, delay);
+                    } else {
+                        reel.setImageResource(lastResults[reelIndex]);
+                        reel.clearAnimation();
+                    }
                 }
             }
-        });
-    }
+        };
 
-    private void stopReelWithDelay(int reelIndex) {
-        Animation stopAnimation = AnimationUtils.loadAnimation(this, R.anim.reel_stop);
-        reels[reelIndex].startAnimation(stopAnimation);
+        handler.post(scrollRunnable);
     }
 
     private void getResults() {
